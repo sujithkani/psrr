@@ -4,6 +4,7 @@ import os
 from constants import FIELDNAMES
 from simulation import make_row, generate_freqs
 from network_stream import PSRRStreamer
+FIXED_INTERVAL = 0.1
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 RESULT_DIR = os.path.join(BASE_DIR, "result")
@@ -76,8 +77,6 @@ def run_stream(s):
                 f"[{row['severity']}]"
             )
             #time.sleep(s["interval"])
-            start = time.time()
-            while (time.time() - start) < s["interval"]:
-                time.sleep(0.01)
+            time.sleep(FIXED_INTERVAL)  
     streamer.close()
     print("\nStream complete.")

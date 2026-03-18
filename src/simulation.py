@@ -9,7 +9,7 @@ def make_row(i, freq, s):
     vin_ac, vout_ac = psrr_to_voltages(psrr_db, s)
     status, code, source, severity = classify(psrr_db, s)
     return {
-        "timestamp_s": round(i * s["interval"], 2),
+        "timestamp_s": round(i * 0.1, 2),
         "frequency_hz": round(freq, 2),
         "vin_dc_v": s["vin"],
         "vout_dc_v": s["vout"],

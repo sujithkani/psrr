@@ -9,6 +9,7 @@ from simulation import generate_freqs, make_row
 from config_loader import load_network_config
 from config_loader import save_network_config
 import sys
+FIXED_INTERVAL_MS = 100
 
 def get_base_path():
     if getattr(sys, 'frozen', False):
@@ -26,7 +27,6 @@ class PSRR_GUI:
         root.rowconfigure(1, weight=1)
         root.columnconfigure(0, weight=1)
         self.streaming=False
-        self.paused=False
         net = load_network_config()
         self.default_ip = net["ip"]
         self.default_port = net["port"]
@@ -81,8 +81,6 @@ class PSRR_GUI:
         self.sim_btn.grid(row=0,column=0,padx=10)
         self.stream_btn=ttk.Button(button_frame,text="Stream",command=self.stream)
         self.stream_btn.grid(row=0,column=1,padx=10)
-        self.pause_btn=ttk.Button(button_frame,text="Pause",command=self.pause_stream,state="disabled")
-        self.pause_btn.grid(row=0,column=2,padx=10)
         self.stop_btn=ttk.Button(button_frame,text="Stop",command=self.stop_stream,state="disabled")
         self.stop_btn.grid(row=0,column=3,padx=10)
         
@@ -138,7 +136,7 @@ class PSRR_GUI:
     #STREAM PAGE
     def build_stream_page(self):
         self.filename=self.add_field(self.tab_stream,"CSV Filename","psrr_simulation.csv",0)
-        self.interval=self.add_field(self.tab_stream,"Stream Interval (s)","0.1",1)
+        #self.interval=self.add_field(self.tab_stream,"Stream Interval (s)","0.1",1)
         #self.ip=self.add_field(self.tab_stream,"Target IP","127.0.0.1",2)
         #self.port=self.add_field(self.tab_stream,"Target Port","6006",3)
         self.ip = self.add_field(self.tab_stream, "Target IP", self.default_ip, 2)
@@ -159,7 +157,7 @@ class PSRR_GUI:
             "t_warn":float(self.warn.get()),
             "t_crit":float(self.crit.get()),
             "filename":self.filename.get(),
-            "interval":float(self.interval.get()),
+            "interval":FIXED_INTERVAL_MS,
             "ip":self.ip.get(),
             "port":int(self.port.get())
         }
@@ -213,29 +211,21 @@ class PSRR_GUI:
         self.warn_count=0
         self.crit_count=0
         self.streaming=True
-        self.paused=False
         self.progress["value"]=0
         self.progress["maximum"]=len(self.freqs)
         self.ax.clear()
         self.ax.set_xscale("log")
         self.sim_btn.config(state="disabled")
         self.stream_btn.config(state="disabled")
-        self.pause_btn.config(state="normal",text="Pause")
         self.stop_btn.config(state="normal")
         self.update_stream()
 
     def update_stream(self):
         if not self.streaming:
             return
-        if self.paused:
-            #self.root.after(25,self.update_stream)
-            delay = max(10, int(self.settings["interval"] * 1000))
-            self.root.after(delay, self.update_stream)
-            return
         if self.index>=len(self.freqs):
             self.sim_btn.config(state="normal")
             self.stream_btn.config(state="normal")
-            self.pause_btn.config(state="disabled")
             self.stop_btn.config(state="disabled")
             try:
                 self.csv_file.close()
@@ -272,33 +262,16 @@ class PSRR_GUI:
         self.canvas.draw()
         self.progress["value"]=self.index+1
         self.index+=1
-        delay = max(10, int(self.settings["interval"] * 1000))
-        self.root.after(delay, self.update_stream)
-
-    #PAUSE
-    def pause_stream(self):
-        if not self.paused:
-            self.paused=True
-            self.pause_btn.config(text="Resume")
-            #disable stream button while paused
-            #self.stream_btn.config(state="disabled")
-        else:
-            self.paused=False
-            self.pause_btn.config(text="Pause")
-            #re-enable stream button when resumed
-            #self.stream_btn.config(state="normal")
+        self.root.after(FIXED_INTERVAL_MS, self.update_stream)
 
     #STOP
     def stop_stream(self):
         self.streaming=False
-        self.paused=False
         self.sim_btn.config(state="normal")
         self.stream_btn.config(state="normal")
-        self.pause_btn.config(state="disabled",text="Pause")
         self.stop_btn.config(state="disabled")
         try:
             self.sock.close()
-            #self.csv_file.close()
         except:
             pass
         if hasattr(self, "csv_file"):
