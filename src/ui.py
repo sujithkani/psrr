@@ -1,9 +1,22 @@
 import tkinter as tk
 from tkinter import ttk
 import socket
+import os
+import csv
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from simulation import generate_freqs, make_row
+from config_loader import load_network_config
+from config_loader import save_network_config
+import sys
+
+def get_base_path():
+    if getattr(sys, 'frozen', False):
+        # Running as EXE
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        return os.path.dirname(os.path.dirname(__file__))
 
 class PSRR_GUI:
     def __init__(self, root):
@@ -14,6 +27,9 @@ class PSRR_GUI:
         root.columnconfigure(0, weight=1)
         self.streaming=False
         self.paused=False
+        net = load_network_config()
+        self.default_ip = net["ip"]
+        self.default_port = net["port"]
 
         #UDP NETWORK SETTINGS
         self.sock=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -75,8 +91,9 @@ class PSRR_GUI:
         self.progress.grid(row=5,column=0,pady=10)
         
     #UDP SENDER
-    def send_udp(self, row):
-        packet=(
+    """
+    def send_udp(self, row, idx, total):
+        packet=(f"{idx+1}/{total},"
             f"{row['frequency_hz']},"
             f"{row['psrr_db']},"
             f"{row['vin_ac_v']},"
@@ -84,7 +101,20 @@ class PSRR_GUI:
             f"{row['severity']}"
         )
         self.sock.sendto(packet.encode(),(self.settings["ip"],self.settings["port"]))
-
+    """
+    def send_udp(self, row, idx, total):
+        packet = (f"{idx+1}/{total},"
+                  f"{row['frequency_hz']},"
+                  f"{row['psrr_db']},"
+                  f"{row['vin_ac_v']},"
+                  f"{row['vout_ac_v']},"
+                  f"{row['severity']}")
+        #self.sock.sendto(packet.encode(), (self.settings["ip"], self.settings["port"]))
+        try:
+            self.sock.sendto(packet.encode(), (self.settings["ip"], self.settings["port"]))
+        except Exception as e:
+            print("UDP ERROR:", e)
+    
     #INPUT FIELD
     def add_field(self,parent,label,default,row):
         var=tk.StringVar(value=default)
@@ -109,11 +139,14 @@ class PSRR_GUI:
     def build_stream_page(self):
         self.filename=self.add_field(self.tab_stream,"CSV Filename","psrr_simulation.csv",0)
         self.interval=self.add_field(self.tab_stream,"Stream Interval (s)","0.1",1)
-        self.ip=self.add_field(self.tab_stream,"Target IP","127.0.0.1",2)
-        self.port=self.add_field(self.tab_stream,"Target Port","6006",3)
+        #self.ip=self.add_field(self.tab_stream,"Target IP","127.0.0.1",2)
+        #self.port=self.add_field(self.tab_stream,"Target Port","6006",3)
+        self.ip = self.add_field(self.tab_stream, "Target IP", self.default_ip, 2)
+        self.port = self.add_field(self.tab_stream, "Target Port", str(self.default_port), 3)
 
     #SETTINGS
     def collect_settings(self):
+        save_network_config(self.ip.get(), int(self.port.get()))
         return {
             "vin":float(self.vin.get()),
             "vout":float(self.vout.get()),
@@ -140,7 +173,8 @@ class PSRR_GUI:
         normal=warn=crit=0
         for i,f in enumerate(freqs):
             row=make_row(i,f,s)
-            self.send_udp(row)
+            self.send_udp(row, i, len(freqs))
+            #self.send_udp(row)
             psrr.append(row["psrr_db"])
             if row["severity"]=="NORMAL":
                 normal+=1
@@ -163,6 +197,14 @@ class PSRR_GUI:
     #STREAM
     def stream(self):
         self.settings=self.collect_settings()
+        from constants import FIELDNAMES
+        BASE_DIR = get_base_path()
+        RESULT_DIR = os.path.join(BASE_DIR, "result")
+        os.makedirs(RESULT_DIR, exist_ok=True)
+        self.filepath = os.path.join(RESULT_DIR, self.settings["filename"])
+        self.csv_file = open(self.filepath, "w", newline="")
+        self.writer = csv.DictWriter(self.csv_file, fieldnames=FIELDNAMES)
+        self.writer.writeheader()
         self.freqs=generate_freqs(self.settings)
         self.index=0
         self.xdata=[]
@@ -177,6 +219,7 @@ class PSRR_GUI:
         self.ax.clear()
         self.ax.set_xscale("log")
         self.sim_btn.config(state="disabled")
+        self.stream_btn.config(state="disabled")
         self.pause_btn.config(state="normal",text="Pause")
         self.stop_btn.config(state="normal")
         self.update_stream()
@@ -185,16 +228,26 @@ class PSRR_GUI:
         if not self.streaming:
             return
         if self.paused:
-            self.root.after(25,self.update_stream)
+            #self.root.after(25,self.update_stream)
+            delay = max(10, int(self.settings["interval"] * 1000))
+            self.root.after(delay, self.update_stream)
             return
         if self.index>=len(self.freqs):
             self.sim_btn.config(state="normal")
+            self.stream_btn.config(state="normal")
             self.pause_btn.config(state="disabled")
             self.stop_btn.config(state="disabled")
+            try:
+                self.csv_file.close()
+            except:
+                pass
             return
         f=self.freqs[self.index]
         row=make_row(self.index,f,self.settings)
-        self.send_udp(row)
+        self.writer.writerow(row)
+        self.csv_file.flush()
+        self.send_udp(row, self.index, len(self.freqs))
+        #self.send_udp(row)
         self.xdata.append(f)
         self.ydata.append(row["psrr_db"])
         if row["severity"]=="NORMAL":
@@ -217,9 +270,10 @@ class PSRR_GUI:
         self.ax.set_ylabel("PSRR (dB)")
         self.ax.grid(True)
         self.canvas.draw()
-        self.progress["value"]=self.index
+        self.progress["value"]=self.index+1
         self.index+=1
-        self.root.after(25,self.update_stream)
+        delay = max(10, int(self.settings["interval"] * 1000))
+        self.root.after(delay, self.update_stream)
 
     #PAUSE
     def pause_stream(self):
@@ -227,12 +281,12 @@ class PSRR_GUI:
             self.paused=True
             self.pause_btn.config(text="Resume")
             #disable stream button while paused
-            self.stream_btn.config(state="disabled")
+            #self.stream_btn.config(state="disabled")
         else:
             self.paused=False
             self.pause_btn.config(text="Pause")
             #re-enable stream button when resumed
-            self.stream_btn.config(state="normal")
+            #self.stream_btn.config(state="normal")
 
     #STOP
     def stop_stream(self):
@@ -244,8 +298,14 @@ class PSRR_GUI:
         self.stop_btn.config(state="disabled")
         try:
             self.sock.close()
+            #self.csv_file.close()
         except:
             pass
+        if hasattr(self, "csv_file"):
+            try:
+                self.csv_file.close()
+            except:
+                pass
         self.sock=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 root=tk.Tk()

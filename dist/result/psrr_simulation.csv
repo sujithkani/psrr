@@ -1,0 +1,8 @@
+timestamp_s,frequency_hz,vin_dc_v,vout_dc_v,vin_ac_v,vout_ac_v,psrr_db,psrr_i32,status,error_code,error_source,severity
+0.0,10.0,5.0,3.3,0.1,8.7e-05,-61.23,-61,False,0,OK,NORMAL
+0.1,10.6,5.0,3.3,0.1,9.2e-05,-60.72,-61,False,0,OK,NORMAL
+0.2,11.23,5.0,3.3,0.1,0.000134,-57.47,-57,False,0,OK,NORMAL
+0.3,11.9,5.0,3.3,0.1,0.000258,-51.78,-52,False,0,OK,NORMAL
+0.4,12.6,5.0,3.3,0.1,0.000198,-54.06,-54,False,0,OK,NORMAL
+0.5,13.35,5.0,3.3,0.1,0.00052,-45.68,-46,False,0,OK,NORMAL
+0.6,14.15,5.0,3.3,0.1,4.6e-05,-66.76,-67,False,0,OK,NORMAL

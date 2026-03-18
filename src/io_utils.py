@@ -53,10 +53,13 @@ def run_stream(s):
 """
 def run_stream(s):
     freqs=generate_freqs(s)
-    streamer=PSRRStreamer()
+    #streamer=PSRRStreamer()
+    from config_loader import load_network_config
+    net = load_network_config()
+    streamer = PSRRStreamer(host=net["ip"],port=net["port"])
     print(f"\nLIVE STREAMING - writing every {s['interval']} seconds")
-    print(f"LabVIEW file: {filepath}\n")
     filepath = os.path.join(RESULT_DIR, s["filename"])
+    print(f"LabVIEW file: {filepath}\n")
     with open(filepath, "w", newline="") as f:
         writer=csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
@@ -64,7 +67,7 @@ def run_stream(s):
             row=make_row(i, freq, s)
             writer.writerow(row)
             #UDP SEND
-            streamer.send_row(row)
+            streamer.send_row(row,i,len(freqs))
             f.flush()
             print(
                 f"[{i+1}/{s['points']}] "
@@ -72,6 +75,9 @@ def run_stream(s):
                 f"PSRR: {row['psrr_db']:>7.2f} dB "
                 f"[{row['severity']}]"
             )
-            time.sleep(s["interval"])
+            #time.sleep(s["interval"])
+            start = time.time()
+            while (time.time() - start) < s["interval"]:
+                time.sleep(0.01)
     streamer.close()
     print("\nStream complete.")
