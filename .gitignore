@@ -1,0 +1,3 @@
+analyser/build/
+analyser/dist/*
+!analyser/dist/*.exe
